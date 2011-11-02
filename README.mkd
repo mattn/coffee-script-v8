@@ -15,7 +15,7 @@ g++ -o coffee coffee.cc -lv8 -lwinmm -lws2_32
 * For other environment
 
 ```
-g++ -o coffee coffee.cc -lv8
+g++ -o coffee coffee.cc -lv8 -lpthread
 ```
 
 Run:

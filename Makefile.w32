@@ -1,0 +1,4 @@
+all : coffee.exe
+
+coffee.exe : coffee.cc
+	g++ -o coffee.exe coffee.cc -lv8 -lwinmm -lws2_32
