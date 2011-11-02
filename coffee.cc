@@ -1,4 +1,5 @@
 // vim:set et sw=2 ts=2 ai:
+#include <stdexcept>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -101,8 +102,8 @@ main(int argc, char* argv[]) {
 
   // compile coffee-script.js
   v8::Local<v8::Script> script = v8::Script::Compile(
-		  v8::String::New(coffee_script_js),
-		  v8::Undefined());
+      v8::String::New(coffee_script_js),
+      v8::Undefined());
   v8::TryCatch try_catch;
   if (try_catch.HasCaught()) {
     report_exception(try_catch);
@@ -128,8 +129,15 @@ main(int argc, char* argv[]) {
     if (opt_eval) {
       coffee_script << argv[n];
     } else {
-      std::ifstream ifs(argv[n]);
-      coffee_script << ifs.rdbuf();
+      try {
+        std::ifstream ifs(argv[n]);
+        if (!ifs.is_open()) throw std::ifstream::failure(
+            std::string("File not found: ") + argv[n]);
+        coffee_script << ifs.rdbuf();
+      } catch (std::ifstream::failure e) {
+        std::cout << e.what() << std::endl;
+        return 1;
+      }
     }
 
     if (opt_compile) {
@@ -161,9 +169,14 @@ main(int argc, char* argv[]) {
         } else {
           filename += ".js";
         }
-        std::ofstream ofs(filename.c_str());
-        ofs << *js_code;
-        ofs.close();
+        try {
+          std::ofstream ofs(filename.c_str());
+          ofs << *js_code;
+          ofs.close();
+        } catch (std::ofstream::failure e) {
+          std::cout << e.what() << std::endl;
+          return 1;
+        }
       }
     } else {
       v8::Local<v8::Object> compileOptions = v8::Object::New();
