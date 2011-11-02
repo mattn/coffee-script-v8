@@ -132,10 +132,10 @@ main(int argc, char* argv[]) {
       try {
         std::ifstream ifs(argv[n]);
         if (!ifs.is_open()) throw std::ifstream::failure(
-            std::string("File not found: ") + argv[n]);
+          std::string("file not found: ") + argv[n]);
         coffee_script << ifs.rdbuf();
       } catch (std::ifstream::failure e) {
-        std::cout << e.what() << std::endl;
+        std::cerr << "Exception occured: " << e.what() << std::endl;
         return 1;
       }
     }
@@ -171,10 +171,12 @@ main(int argc, char* argv[]) {
         }
         try {
           std::ofstream ofs(filename.c_str());
+          if (!ofs.is_open()) throw std::ofstream::failure(
+            std::string("can't open file: ") + filename);
           ofs << *js_code;
           ofs.close();
         } catch (std::ofstream::failure e) {
-          std::cout << e.what() << std::endl;
+          std::cerr << "Exception occured: " << e.what() << std::endl;
           return 1;
         }
       }
