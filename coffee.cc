@@ -19,6 +19,7 @@ usage(void) {
   std::cerr << "  -s, --stdio        listen for and compile scripts over stdio" << std::endl;
   std::cerr << "  -e, --eval         compile a string from the command line" << std::endl;
   std::cerr << "  -b, --bare         compile without the top-level function wrapper" << std::endl;
+  std::cerr << "  -v, --version      display CoffeeScript version" << std::endl;
   std::cerr << "  -h, --help         display this help message" << std::endl;
   exit(1);
 }
@@ -78,13 +79,15 @@ main(int argc, char* argv[]) {
   bool opt_stdio = false;
   bool opt_eval = false;
   bool opt_bare = false;
-  while ((ch = getopt(argc, argv, "cpsebh")) != -1) {
+  bool opt_version = false;
+  while ((ch = getopt(argc, argv, "cpsebhv")) != -1) {
     switch (ch){
     case 'c': opt_compile = true; break;
     case 'p': opt_print = true; break;
     case 's': opt_stdio = true; break;
     case 'e': opt_eval = true; break;
     case 'b': opt_bare = true; break;
+    case 'v': opt_version = true; break;
     default: usage(); break;
     }
   }
@@ -93,7 +96,7 @@ main(int argc, char* argv[]) {
   argc -= optind;
   argv += optind;
 
-  if (!opt_eval && argc == 0) usage();
+  if (!opt_version && !opt_eval && argc == 0) usage();
   if (opt_eval || opt_stdio) opt_print = true;
 
   // ready to start v8
@@ -118,6 +121,13 @@ main(int argc, char* argv[]) {
     return 1;
   }
   v8::Local<v8::Object> coffee_object = v8::Local<v8::Object>::Cast(result);
+
+  if (opt_version) {
+    result = coffee_object->Get(v8::String::New("VERSION"));
+    v8::String::Utf8Value version(result->ToString());
+    std::cout << "CoffeeScript verison " << *version << std::endl;
+    exit(0);
+  }
 
   // make console.log()
   v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
