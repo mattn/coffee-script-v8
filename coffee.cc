@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <v8.h>
 #include <getopt.h>
+#include <readline/readline.h>
 
 extern const char* coffee_script_js;
 
@@ -15,6 +16,7 @@ usage(void) {
   std::cerr << "Usage: coffee [options] path/to/script.coffee" << std::endl;
   std::cerr << std::endl;
   std::cerr << "  -c, --compile      compile to JavaScript and save as .js files" << std::endl;
+  std::cerr << "  -i, --interactive  run an interactive CoffeeScript REPL" << std::endl;
   std::cerr << "  -p, --print        print the compiled JavaScript to stdout" << std::endl;
   std::cerr << "  -s, --stdio        listen for and compile scripts over stdio" << std::endl;
   std::cerr << "  -e, --eval         compile a string from the command line" << std::endl;
@@ -80,9 +82,11 @@ main(int argc, char* argv[]) {
   bool opt_eval = false;
   bool opt_bare = false;
   bool opt_version = false;
-  while ((ch = getopt(argc, argv, "cpsebhv")) != -1) {
+  bool opt_interactive = false;
+  while ((ch = getopt(argc, argv, "cpsebhvi")) != -1) {
     switch (ch){
     case 'c': opt_compile = true; break;
+    case 'i': opt_interactive = true; break;
     case 'p': opt_print = true; break;
     case 's': opt_stdio = true; break;
     case 'e': opt_eval = true; break;
@@ -96,7 +100,7 @@ main(int argc, char* argv[]) {
   argc -= optind;
   argv += optind;
 
-  if (!opt_version && !opt_eval && argc == 0) usage();
+  if (!opt_version && !opt_interactive && !opt_eval && argc == 0) usage();
   if (opt_eval || opt_stdio) opt_print = true;
 
   // ready to start v8
@@ -136,80 +140,110 @@ main(int argc, char* argv[]) {
   v8::Local<v8::Object> console = i->NewInstance();
   context->Global()->Set(v8::String::New("console"), console);
 
-  for (int n = 0; n < argc; n++) {
-    std::stringstream coffee_script;
-    if (opt_eval) {
-      coffee_script << argv[n];
-    } else if (opt_stdio) {
-      coffee_script << std::cin.rdbuf();
-    } else {
-      try {
-        std::ifstream ifs(argv[n]);
-        if (!ifs.is_open()) throw std::ifstream::failure(
-          std::string("file not found: ") + argv[n]);
-        coffee_script << ifs.rdbuf();
-      } catch (std::ifstream::failure e) {
-        std::cerr << "Exception occured: " << e.what() << std::endl;
-        return 1;
-      }
-    }
+  v8::Local<v8::Object> compileOptions = v8::Object::New();
+  compileOptions->Set(v8::String::New("filename"), v8::Undefined());
+  compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
-    if (opt_compile) {
-      v8::Local<v8::Object> compileOptions = v8::Object::New();
-      compileOptions->Set(v8::String::New("filename"), v8::Undefined());
-      compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
-  
-      v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
-        coffee_object->GetRealNamedProperty(v8::String::New("compile")));
-  
-      v8::Local<v8::Value> args[2];
-      args[0] = v8::String::New(coffee_script.str().c_str());
+  if (opt_interactive) {
+    std::stringstream coffee_script;
+    v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+      coffee_object->GetRealNamedProperty(v8::String::New("eval")));
+    v8::Local<v8::Value> args[2];
+    bool following = false;
+    std::string line;
+    while (true) {
+      line = readline(following ? "......> " : "coffee> ");
+      if (line.at(line.size()-1) == '\\') {
+        following = true;
+        coffee_script << line.substr(0, line.size()-1) << std::endl;
+        continue;
+      }
+      following = false;
+      coffee_script << line;
+
+      std::string code = "_=(";
+      code += coffee_script.str() + "\n)";
+      args[0] = v8::String::New(code.c_str());
       args[1] = compileOptions;
+      coffee_script.str("");
+      coffee_script.clear(std::stringstream::goodbit);
   
       result = func->Call(context->Global(), 2, args);
       if (try_catch.HasCaught()) {
         report_exception(try_catch);
-        return 1;
-      }
-  
-      v8::String::Utf8Value js_code(result->ToString());
-      if (opt_print) {
-        std::cout << *js_code << std::endl;
       } else {
-        std::string filename = argv[n];
-        size_t pos = filename.find_last_of("\\/.");
-        if (pos != std::string::npos && filename.at(pos) == '.') {
-          filename = filename.substr(0, pos) + ".js";
-        } else {
-          filename += ".js";
-        }
+        v8::String::Utf8Value result_string(result);
+        std::cout << *result_string << std::endl;
+      }
+    }
+  } else {
+    for (int n = 0; n < argc; n++) {
+      std::stringstream coffee_script;
+      if (opt_eval) {
+        coffee_script << argv[n];
+      } else if (opt_stdio) {
+        coffee_script << std::cin.rdbuf();
+      } else {
         try {
-          std::ofstream ofs(filename.c_str());
-          if (!ofs.is_open()) throw std::ofstream::failure(
-            std::string("can't open file: ") + filename);
-          ofs << *js_code;
-          ofs.close();
-        } catch (std::ofstream::failure e) {
+          std::ifstream ifs(argv[n]);
+          if (!ifs.is_open()) throw std::ifstream::failure(
+            std::string("file not found: ") + argv[n]);
+          coffee_script << ifs.rdbuf();
+        } catch (std::ifstream::failure e) {
           std::cerr << "Exception occured: " << e.what() << std::endl;
           return 1;
         }
       }
-    } else {
-      v8::Local<v8::Object> compileOptions = v8::Object::New();
-      compileOptions->Set(v8::String::New("filename"), v8::Undefined());
-      compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
-
-      v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
-        coffee_object->GetRealNamedProperty(v8::String::New("run")));
-
-      v8::Local<v8::Value> args[2];
-      args[0] = v8::String::New(coffee_script.str().c_str());
-      args[1] = compileOptions;
   
-      result = func->Call(context->Global(), 2, args);
-      if (try_catch.HasCaught()) {
-        report_exception(try_catch);
-        return 1;
+      if (opt_compile) {
+        v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+          coffee_object->GetRealNamedProperty(v8::String::New("compile")));
+    
+        v8::Local<v8::Value> args[2];
+        args[0] = v8::String::New(coffee_script.str().c_str());
+        args[1] = compileOptions;
+    
+        result = func->Call(context->Global(), 2, args);
+        if (try_catch.HasCaught()) {
+          report_exception(try_catch);
+          return 1;
+        }
+    
+        v8::String::Utf8Value js_code(result->ToString());
+        if (opt_print) {
+          std::cout << *js_code << std::endl;
+        } else {
+          std::string filename = argv[n];
+          size_t pos = filename.find_last_of("\\/.");
+          if (pos != std::string::npos && filename.at(pos) == '.') {
+            filename = filename.substr(0, pos) + ".js";
+          } else {
+            filename += ".js";
+          }
+          try {
+            std::ofstream ofs(filename.c_str());
+            if (!ofs.is_open()) throw std::ofstream::failure(
+              std::string("can't open file: ") + filename);
+            ofs << *js_code;
+            ofs.close();
+          } catch (std::ofstream::failure e) {
+            std::cerr << "Exception occured: " << e.what() << std::endl;
+            return 1;
+          }
+        }
+      } else {
+        v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+          coffee_object->GetRealNamedProperty(v8::String::New("run")));
+  
+        v8::Local<v8::Value> args[2];
+        args[0] = v8::String::New(coffee_script.str().c_str());
+        args[1] = compileOptions;
+    
+        result = func->Call(context->Global(), 2, args);
+        if (try_catch.HasCaught()) {
+          report_exception(try_catch);
+          return 1;
+        }
       }
     }
   }
