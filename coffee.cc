@@ -7,7 +7,19 @@
 #include <cstdlib>
 #include <v8.h>
 #include <getopt.h>
+#include <io.h>
+#ifdef HAVE_READLINE
 #include <readline/readline.h>
+#else
+static const char*
+readline(const char* prompt) {
+  static std::string line;
+  if (std::cin.eof()) return NULL;
+  std::cout << prompt;
+  getline(std::cin, line);
+  return line.c_str();
+}
+#endif
 
 extern const char* coffee_script_js;
 
@@ -95,12 +107,16 @@ main(int argc, char* argv[]) {
     default: usage(); break;
     }
   }
+  if (!isatty(fileno(stdin))) {
+    opt_stdio = true;
+  }
   if (opt_stdio) optind--;
 
   argc -= optind;
   argv += optind;
 
-  if (!opt_version && !opt_interactive && !opt_eval && argc == 0) usage();
+  if (!opt_version && !opt_eval && !opt_stdio && argc == 0)
+    opt_interactive = true;
   if (opt_eval || opt_stdio) opt_print = true;
 
   // ready to start v8
@@ -145,15 +161,23 @@ main(int argc, char* argv[]) {
   compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
   if (opt_interactive) {
+    v8::Local<v8::Value> args[2];
     std::stringstream coffee_script;
+
     v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
       coffee_object->GetRealNamedProperty(v8::String::New("eval")));
-    v8::Local<v8::Value> args[2];
+    args[0] = v8::String::New("_=_");
+    args[1] = compileOptions;
+    result = func->Call(context->Global(), 2, args);
+
     bool following = false;
     std::string line;
     while (true) {
-      line = readline(following ? "......> " : "coffee> ");
-      if (line.at(line.size()-1) == '\\') {
+      const char* rline = readline(following ? "......> " : "coffee> ");
+      if (!rline) break;
+      line = rline;
+      if (!following && line.size() == 0) continue;
+      if (line.size() > 0 && line.at(line.size()-1) == '\\') {
         following = true;
         coffee_script << line.substr(0, line.size()-1) << std::endl;
         continue;
