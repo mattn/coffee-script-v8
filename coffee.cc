@@ -200,7 +200,11 @@ main(int argc, char* argv[]) {
       result = func->Call(context->Global(), 2, call_args);
       if (try_catch.HasCaught()) {
         report_exception(try_catch);
-      } else {
+        if (!try_catch.CanContinue()) {
+          exit(1);
+        }
+        try_catch.Reset();
+      } else if (!result->IsUndefined()) {
         v8::String::Utf8Value result_string(result);
         std::cout << *result_string << std::endl;
       }
