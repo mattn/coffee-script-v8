@@ -165,8 +165,6 @@ main(int argc, char* argv[]) {
   compileOptions->Set(v8::String::New("filename"), v8::Undefined());
   compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
-  context->DetachGlobal();
-
   if (opt_interactive) {
     v8::TryCatch try_catch;
     v8::HandleScope handle_scope;
