@@ -3,10 +3,10 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <vector>
 #include <string>
 #include <cstdlib>
 #include <v8.h>
-#include <getopt.h>
 #include <io.h>
 #ifdef HAVE_READLINE
 #include <readline/readline.h>
@@ -29,6 +29,7 @@ usage(void) {
   std::cerr << std::endl;
   std::cerr << "  -c, --compile      compile to JavaScript and save as .js files" << std::endl;
   std::cerr << "  -i, --interactive  run an interactive CoffeeScript REPL" << std::endl;
+  std::cerr << "  -o, --output       set the directory for compiled JavaScript" << std::endl;
   std::cerr << "  -p, --print        print the compiled JavaScript to stdout" << std::endl;
   std::cerr << "  -s, --stdio        listen for and compile scripts over stdio" << std::endl;
   std::cerr << "  -e, --eval         compile a string from the command line" << std::endl;
@@ -95,27 +96,31 @@ main(int argc, char* argv[]) {
   bool opt_bare = false;
   bool opt_version = false;
   bool opt_interactive = false;
-  while ((ch = getopt(argc, argv, "cpsebhvi")) != -1) {
-    switch (ch){
-    case 'c': opt_compile = true; break;
-    case 'i': opt_interactive = true; break;
-    case 'p': opt_print = true; break;
-    case 's': opt_stdio = true; break;
-    case 'e': opt_eval = true; break;
-    case 'b': opt_bare = true; break;
-    case 'v': opt_version = true; break;
-    default: usage(); break;
+  std::string opt_output;
+  std::vector<std::string> args;
+  for (int n = 1; n < argc; n++) {
+    std::string arg = argv[n];
+    if (arg == "-c" || arg == "--compile") opt_compile = true;
+    else if (arg == "-i" || arg == "--interactive") opt_interactive = true;
+    else if (arg == "-o" || arg == "--output" && n < argc-1) {
+      opt_output = argv[n+1];
+      n++;
     }
+    else if (arg == "-p" || arg == "--print") opt_print = true;
+    else if (arg == "-e" || arg == "--eval") opt_eval = true;
+    else if (arg == "-b" || arg == "--bare") opt_bare = true;
+    else if (arg == "-v" || arg == "--version") opt_version = true;
+    else if (!arg.empty() && arg.at(0) != '-') {
+      args.push_back(argv[n]);
+    }
+    else usage();
   }
   if (!isatty(fileno(stdin))) {
     opt_stdio = true;
   }
-  if (opt_stdio) optind--;
+  if (opt_stdio) args.push_back("-");
 
-  argc -= optind;
-  argv += optind;
-
-  if (!opt_version && !opt_eval && !opt_stdio && argc == 0)
+  if (!opt_version && !opt_eval && !opt_stdio && args.empty())
     opt_interactive = true;
   if (opt_eval || opt_stdio) opt_print = true;
 
@@ -161,14 +166,14 @@ main(int argc, char* argv[]) {
   compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
   if (opt_interactive) {
-    v8::Local<v8::Value> args[2];
+    v8::Local<v8::Value> call_args[2];
     std::stringstream coffee_script;
 
     v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
       coffee_object->GetRealNamedProperty(v8::String::New("eval")));
-    args[0] = v8::String::New("_=_");
-    args[1] = compileOptions;
-    result = func->Call(context->Global(), 2, args);
+    call_args[0] = v8::String::New("_=_");
+    call_args[1] = compileOptions;
+    result = func->Call(context->Global(), 2, call_args);
 
     bool following = false;
     std::string line;
@@ -187,12 +192,12 @@ main(int argc, char* argv[]) {
 
       std::string code = "_=(";
       code += coffee_script.str() + "\n)";
-      args[0] = v8::String::New(code.c_str());
-      args[1] = compileOptions;
+      call_args[0] = v8::String::New(code.c_str());
+      call_args[1] = compileOptions;
       coffee_script.str("");
       coffee_script.clear(std::stringstream::goodbit);
   
-      result = func->Call(context->Global(), 2, args);
+      result = func->Call(context->Global(), 2, call_args);
       if (try_catch.HasCaught()) {
         report_exception(try_catch);
       } else {
@@ -201,17 +206,19 @@ main(int argc, char* argv[]) {
       }
     }
   } else {
-    for (int n = 0; n < argc; n++) {
+    std::vector<std::string>::const_iterator it;
+    for (it = args.begin(); it != args.end(); it++) {
+      std::string arg = *it;
       std::stringstream coffee_script;
-      if (opt_eval) {
-        coffee_script << argv[n];
-      } else if (opt_stdio) {
+      if (opt_stdio) {
         coffee_script << std::cin.rdbuf();
+      } else if (opt_eval) {
+        coffee_script << arg;
       } else {
         try {
-          std::ifstream ifs(argv[n]);
+          std::ifstream ifs(arg.c_str());
           if (!ifs.is_open()) throw std::ifstream::failure(
-            std::string("file not found: ") + argv[n]);
+            std::string("file not found: ") + arg);
           coffee_script << ifs.rdbuf();
         } catch (std::ifstream::failure e) {
           std::cerr << "Exception occured: " << e.what() << std::endl;
@@ -223,11 +230,11 @@ main(int argc, char* argv[]) {
         v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
           coffee_object->GetRealNamedProperty(v8::String::New("compile")));
     
-        v8::Local<v8::Value> args[2];
-        args[0] = v8::String::New(coffee_script.str().c_str());
-        args[1] = compileOptions;
+        v8::Local<v8::Value> call_args[2];
+        call_args[0] = v8::String::New(coffee_script.str().c_str());
+        call_args[1] = compileOptions;
     
-        result = func->Call(context->Global(), 2, args);
+        result = func->Call(context->Global(), 2, call_args);
         if (try_catch.HasCaught()) {
           report_exception(try_catch);
           return 1;
@@ -237,8 +244,17 @@ main(int argc, char* argv[]) {
         if (opt_print) {
           std::cout << *js_code << std::endl;
         } else {
-          std::string filename = argv[n];
-          size_t pos = filename.find_last_of("\\/.");
+          std::string filename = arg;
+          size_t pos;
+          if (!opt_output.empty()) {
+            pos = filename.find_last_of("\\/");
+            if (pos != std::string::npos && filename.at(pos) == '.') {
+              filename = opt_output + filename.substr(pos);
+            } else {
+              filename = opt_output + std::string("/") + filename;
+            }
+          }
+          pos = filename.find_last_of("\\/.");
           if (pos != std::string::npos && filename.at(pos) == '.') {
             filename = filename.substr(0, pos) + ".js";
           } else {
@@ -259,11 +275,12 @@ main(int argc, char* argv[]) {
         v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
           coffee_object->GetRealNamedProperty(v8::String::New("run")));
   
-        v8::Local<v8::Value> args[2];
-        args[0] = v8::String::New(coffee_script.str().c_str());
-        args[1] = compileOptions;
+        v8::Local<v8::Value> call_args[2];
+        call_args[0] = v8::String::New(coffee_script.str().c_str());
+        call_args[1] = compileOptions;
     
-        result = func->Call(context->Global(), 2, args);
+        result = func->Call(context->Global(), 2, call_args);
+        std::cout << coffee_script.str() << std::endl;
         if (try_catch.HasCaught()) {
           report_exception(try_catch);
           return 1;
