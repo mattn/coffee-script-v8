@@ -41,11 +41,9 @@ usage(void) {
 
 static v8::Handle<v8::Value>
 console_log(const v8::Arguments& args) {
-  bool first = true;
   for (int n = 0; n < args.Length(); n++) {
     v8::HandleScope handle_scope;
-    if (n)
-      std::cout << " ";
+    if (n) std::cout << " ";
     v8::String::Utf8Value str(args[n]);
     std::cout << *str;
   }
@@ -107,6 +105,7 @@ main(int argc, char* argv[]) {
       n++;
     }
     else if (arg == "-p" || arg == "--print") opt_print = true;
+    else if (arg == "-s" || arg == "--stdio") opt_stdio = true;
     else if (arg == "-e" || arg == "--eval") opt_eval = true;
     else if (arg == "-b" || arg == "--bare") opt_bare = true;
     else if (arg == "-v" || arg == "--version") opt_version = true;
@@ -118,11 +117,12 @@ main(int argc, char* argv[]) {
   if (!isatty(fileno(stdin))) {
     opt_stdio = true;
   }
-  if (opt_stdio) args.push_back("-");
+  if (opt_print) {
+    opt_compile = true;
+  }
 
   if (!opt_version && !opt_eval && !opt_stdio && args.empty())
     opt_interactive = true;
-  if (opt_eval || opt_stdio) opt_print = true;
 
   // ready to start v8
   v8::HandleScope handle_scope;
@@ -242,7 +242,7 @@ main(int argc, char* argv[]) {
     
         v8::String::Utf8Value js_code(result->ToString());
         if (opt_print) {
-          std::cout << *js_code << std::endl;
+          std::cout << *js_code;
         } else {
           std::string filename = arg;
           size_t pos;
@@ -279,8 +279,7 @@ main(int argc, char* argv[]) {
         call_args[0] = v8::String::New(coffee_script.str().c_str());
         call_args[1] = compileOptions;
     
-        result = func->Call(context->Global(), 2, call_args);
-        std::cout << coffee_script.str() << std::endl;
+        func->Call(context->Global(), 2, call_args);
         if (try_catch.HasCaught()) {
           report_exception(try_catch);
           return 1;
