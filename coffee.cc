@@ -165,6 +165,8 @@ main(int argc, char* argv[]) {
   compileOptions->Set(v8::String::New("filename"), v8::Undefined());
   compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
+  context->DetachGlobal();
+
   if (opt_interactive) {
     v8::TryCatch try_catch;
     v8::HandleScope handle_scope;
@@ -174,7 +176,7 @@ main(int argc, char* argv[]) {
 
     v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(
       coffee_object->GetRealNamedProperty(v8::String::New("eval")));
-    call_args[0] = v8::String::New("_=Script.sandbox._");
+    call_args[0] = v8::String::New("_=_");
     call_args[1] = compileOptions;
     result = func->Call(context->Global(), 2, call_args);
 
