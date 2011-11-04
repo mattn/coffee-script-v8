@@ -131,7 +131,7 @@ main(int argc, char* argv[]) {
   v8::Context::Scope context_scope(context);
 
   // compile coffee-script.js
-  v8::Local<v8::Script> script = v8::Script::Compile(
+  v8::Handle<v8::Script> script = v8::Script::Compile(
       v8::String::New(coffee_script_js),
       v8::Undefined());
   v8::TryCatch try_catch;
@@ -140,12 +140,12 @@ main(int argc, char* argv[]) {
     return 1;
   }
   // get CoffeeScript object
-  v8::Local<v8::Value> result = script->Run();
+  v8::Handle<v8::Value> result = script->Run();
   if (try_catch.HasCaught()) {
     report_exception(try_catch);
     return 1;
   }
-  v8::Local<v8::Object> coffee_object = v8::Local<v8::Object>::Cast(result);
+  v8::Handle<v8::Object> coffee_object = v8::Handle<v8::Object>::Cast(result);
 
   if (opt_version) {
     result = coffee_object->Get(v8::String::New("VERSION"));
@@ -155,23 +155,26 @@ main(int argc, char* argv[]) {
   }
 
   // make console.log()
-  v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
-  v8::Local<v8::ObjectTemplate> i = t->InstanceTemplate();
+  v8::Handle<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
+  v8::Handle<v8::ObjectTemplate> i = t->InstanceTemplate();
   i->Set("log", v8::FunctionTemplate::New(console_log));
-  v8::Local<v8::Object> console = i->NewInstance();
+  v8::Handle<v8::Object> console = i->NewInstance();
   context->Global()->Set(v8::String::New("console"), console);
 
-  v8::Local<v8::Object> compileOptions = v8::Object::New();
+  v8::Handle<v8::Object> compileOptions = v8::Object::New();
   compileOptions->Set(v8::String::New("filename"), v8::Undefined());
   compileOptions->Set(v8::String::New("bare"), v8::Boolean::New(opt_bare));
 
   if (opt_interactive) {
-    v8::Local<v8::Value> call_args[2];
+    v8::TryCatch try_catch;
+    v8::HandleScope handle_scope;
+
+    v8::Handle<v8::Value> call_args[2];
     std::stringstream coffee_script;
 
-    v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+    v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(
       coffee_object->GetRealNamedProperty(v8::String::New("eval")));
-    call_args[0] = v8::String::New("_=_");
+    call_args[0] = v8::String::New("_=Script.sandbox._");
     call_args[1] = compileOptions;
     result = func->Call(context->Global(), 2, call_args);
 
@@ -210,6 +213,9 @@ main(int argc, char* argv[]) {
       }
     }
   } else {
+    v8::TryCatch try_catch;
+    v8::HandleScope handle_scope;
+
     std::vector<std::string>::const_iterator it;
     for (it = args.begin(); it != args.end(); it++) {
       std::string arg = *it;
@@ -231,10 +237,10 @@ main(int argc, char* argv[]) {
       }
   
       if (opt_compile) {
-        v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+        v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(
           coffee_object->GetRealNamedProperty(v8::String::New("compile")));
     
-        v8::Local<v8::Value> call_args[2];
+        v8::Handle<v8::Value> call_args[2];
         call_args[0] = v8::String::New(coffee_script.str().c_str());
         call_args[1] = compileOptions;
     
@@ -276,10 +282,10 @@ main(int argc, char* argv[]) {
           }
         }
       } else {
-        v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(
+        v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(
           coffee_object->GetRealNamedProperty(v8::String::New("run")));
   
-        v8::Local<v8::Value> call_args[2];
+        v8::Handle<v8::Value> call_args[2];
         call_args[0] = v8::String::New(coffee_script.str().c_str());
         call_args[1] = compileOptions;
     
