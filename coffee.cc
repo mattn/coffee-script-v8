@@ -7,7 +7,7 @@
 #include <string>
 #include <cstdlib>
 #include <v8.h>
-#include <io.h>
+#include <sys/io.h>
 #ifdef HAVE_READLINE
 #include <readline/readline.h>
 #else
