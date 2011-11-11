@@ -7,7 +7,11 @@
 #include <string>
 #include <cstdlib>
 #include <v8.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <sys/io.h>
+#endif
 #ifdef HAVE_READLINE
 #include <readline/readline.h>
 #else
