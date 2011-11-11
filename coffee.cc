@@ -238,7 +238,7 @@ main(int argc, char* argv[]) {
       call_args[1] = compileOptions;
       coffee_script.str("");
       coffee_script.clear(std::stringstream::goodbit);
-  
+
       result = func->Call(context->Global(), 2, call_args);
       if (result.IsEmpty()) {
         if (try_catch.HasCaught()) {
@@ -252,6 +252,8 @@ main(int argc, char* argv[]) {
         v8::String::Utf8Value result_string(result);
         std::cout << *result_string << std::endl;
       }
+      // GC
+      while (!v8::V8::IdleNotification());
     }
   } else {
     v8::TryCatch try_catch;
