@@ -157,6 +157,10 @@ main(int argc, char* argv[]) {
     opt_compile = true;
   }
 
+  if (opt_stdio && args.empty()) {
+    args.push_back("");
+  }
+
   if (!opt_version && !opt_eval && !opt_stdio && args.empty())
     opt_interactive = true;
 
