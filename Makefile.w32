@@ -1,7 +1,7 @@
 all : coffee.exe
 
 coffee.exe : coffee.cc
-	g++ -o coffee.exe coffee.cc -lv8 -lwinmm -lws2_32
+	g++ -static-libgcc -static-libstdc++ -o coffee.exe coffee.cc -lv8 -lwinmm -lws2_32
 
 readline : coffee.cc
 	g++ -DHAVE_READLINE -o coffee.exe coffee.cc -lv8 -lwinmm -lws2_32 -lreadline
