@@ -188,7 +188,8 @@ main(int argc, char* argv[]) {
     report_exception(try_catch);
     return 1;
   }
-  v8::Handle<v8::Object> coffee_object = v8::Handle<v8::Object>::Cast(result);
+  v8::Handle<v8::Object> coffee_object = v8::Handle<v8::Object>::Cast(
+    v8::Context::GetCurrent()->Global()->Get(v8::String::New("CoffeeScript")));
 
   if (opt_version) {
     result = coffee_object->Get(v8::String::New("VERSION"));
