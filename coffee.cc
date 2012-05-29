@@ -25,6 +25,168 @@ readline(const char* prompt) {
 }
 #endif
 
+static char utf8len_tab[256] = {
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*bogus*/
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*bogus*/
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1,
+};
+
+static int
+utf_bytes2char(unsigned char* p) {
+  int len;
+
+  if (p[0] < 0x80) /* be quick for ASCII */
+    return p[0];
+
+  len = utf8len_tab[p[0]];
+  if ((p[1] & 0xc0) == 0x80) {
+    if (len == 2)
+      return ((p[0] & 0x1f) << 6) + (p[1] & 0x3f);
+    if ((p[2] & 0xc0) == 0x80) {
+      if (len == 3)
+        return ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6)
+          + (p[2] & 0x3f);
+      if ((p[3] & 0xc0) == 0x80) {
+        if (len == 4)
+          return ((p[0] & 0x07) << 18) + ((p[1] & 0x3f) << 12)
+            + ((p[2] & 0x3f) << 6) + (p[3] & 0x3f);
+        if ((p[4] & 0xc0) == 0x80) {
+          if (len == 5)
+            return ((p[0] & 0x03) << 24) + ((p[1] & 0x3f) << 18)
+              + ((p[2] & 0x3f) << 12) + ((p[3] & 0x3f) << 6)
+              + (p[4] & 0x3f);
+          if ((p[5] & 0xc0) == 0x80 && len == 6)
+            return ((p[0] & 0x01) << 30) + ((p[1] & 0x3f) << 24)
+              + ((p[2] & 0x3f) << 18) + ((p[3] & 0x3f) << 12)
+              + ((p[4] & 0x3f) << 6) + (p[5] & 0x3f);
+        }
+      }
+    }
+  }
+  /* Illegal value, just return the first byte */
+  return p[0];
+}
+
+static int
+utf_char2bytes(int c, unsigned char* buf) {
+  if (c < 0x80) { /* 7 bits */
+    buf[0] = c;
+    return 1;
+  }
+  if (c < 0x800) { /* 11 bits */
+    buf[0] = 0xc0 + ((unsigned)c >> 6);
+    buf[1] = 0x80 + (c & 0x3f);
+    return 2;
+  }
+  if (c < 0x10000) { /* 16 bits */
+    buf[0] = 0xe0 + ((unsigned)c >> 12);
+    buf[1] = 0x80 + (((unsigned)c >> 6) & 0x3f);
+    buf[2] = 0x80 + (c & 0x3f);
+    return 3;
+  }
+  if (c < 0x200000) { /* 21 bits */
+    buf[0] = 0xf0 + ((unsigned)c >> 18);
+    buf[1] = 0x80 + (((unsigned)c >> 12) & 0x3f);
+    buf[2] = 0x80 + (((unsigned)c >> 6) & 0x3f);
+    buf[3] = 0x80 + (c & 0x3f);
+    return 4;
+  }
+  if (c < 0x4000000) { /* 26 bits */
+    buf[0] = 0xf8 + ((unsigned)c >> 24);
+    buf[1] = 0x80 + (((unsigned)c >> 18) & 0x3f);
+    buf[2] = 0x80 + (((unsigned)c >> 12) & 0x3f);
+    buf[3] = 0x80 + (((unsigned)c >> 6) & 0x3f);
+    buf[4] = 0x80 + (c & 0x3f);
+    return 5;
+  }
+
+  /* 31 bits */
+  buf[0] = 0xfc + ((unsigned)c >> 30);
+  buf[1] = 0x80 + (((unsigned)c >> 24) & 0x3f);
+  buf[2] = 0x80 + (((unsigned)c >> 18) & 0x3f);
+  buf[3] = 0x80 + (((unsigned)c >> 12) & 0x3f);
+  buf[4] = 0x80 + (((unsigned)c >> 6) & 0x3f);
+  buf[5] = 0x80 + (c & 0x3f);
+  return 6;
+}
+
+std::string string_to_utf8(std::string str) {
+  char* ptr = (char*)str.c_str();
+  size_t mbssize = strlen(ptr);
+  size_t wcssize = mbssize;
+  wchar_t* wcstr = new wchar_t[wcssize + 1];
+  int n = 0, clen = 0, len = 0;
+  mblen(NULL, 0);
+  while(len < mbssize) {
+    clen = mblen(ptr, MB_CUR_MAX);
+    if (clen <= 0) {
+      mblen(NULL, 0);
+      clen = 1;
+    }
+    clen = mbtowc(wcstr+n++, ptr,  clen);
+    if (clen <= 0) {
+      mblen(NULL, 0);
+      clen = 1;
+    }
+    len += clen;
+    ptr += clen;
+  }
+  wcstr[n] = 0;
+  wcssize = n;
+  std::string ret;
+  for(n = 0; n < wcssize; n++) {
+    unsigned char bytes[MB_CUR_MAX];
+    int len = utf_char2bytes(wcstr[n], bytes);
+    bytes[len] = 0;
+    ret += (char*)bytes;
+  }
+  delete[] wcstr;
+  return ret;
+}
+
+std::string utf8_to_string(std::string str) {
+  char* ptr = (char*)str.c_str();
+  if (ptr[0] == (char)0xef && ptr[1] == (char)0xbb && ptr[2] == (char)0xbf)
+    ptr += 3;
+  size_t mbssize = strlen(ptr);
+  size_t wcssize = mbssize;
+  wchar_t* wcstr = new wchar_t[wcssize + 1];
+  int n = 0, clen = 0, len = 0;
+  while(len < mbssize) {
+    int c = utf_bytes2char((unsigned char*)ptr);
+    if (c == 0x301c) c = 0xff5e;
+    if (c == 0x2016) c = 0x2225;
+    if (c == 0x2212) c = 0xff0d;
+    if (c == 0x00a2) c = 0xffe0;
+    if (c == 0x00a3) c = 0xffe1;
+    if (c == 0x00ac) c = 0xffe2;
+    wcstr[n++] = c;
+    clen = utf8len_tab[(unsigned char)*ptr];
+    len += clen;
+    ptr += clen;
+  }
+  wcstr[n] = 0;
+  wcssize = n;
+  mbssize = wcslen(wcstr)*8;
+  char* mbstr = new char[mbssize + 1];
+  clen = 0;
+  len = 0;
+  for(n = 0; n < wcssize; n++) {
+    clen = wctomb(mbstr+len, wcstr[n]);
+    len += clen <= 0 ? 1 : clen;
+  }
+  *(mbstr+len) = 0;
+  delete[] wcstr;
+  std::string ret = mbstr;
+  delete[] mbstr;
+  return ret;
+}
+
 extern const char* coffee_script_js;
 
 static void
@@ -49,7 +211,7 @@ console_log(const v8::Arguments& args) {
     v8::HandleScope handle_scope;
     if (n) std::cout << " ";
     v8::String::Utf8Value str(args[n]);
-    std::cout << *str;
+    std::cout << utf8_to_string(*str);
   }
   std::cout << std::endl;
   return v8::Undefined();
@@ -92,7 +254,7 @@ report_exception(v8::TryCatch& try_catch) {
   v8::Handle<v8::Message> message = try_catch.Message();
   v8::String::Utf8Value exception(try_catch.Exception());
   if (message.IsEmpty()) {
-    std::cerr << *exception << std::endl;
+    std::cerr << utf8_to_string(*exception) << std::endl;
   } else {
     v8::String::Utf8Value filename(message->GetScriptResourceName());
     const char* filename_string = *filename;
@@ -102,7 +264,7 @@ report_exception(v8::TryCatch& try_catch) {
       << ":" << linenum
       << ": " << *exception << std::endl;
     v8::String::Utf8Value sourceline(message->GetSourceLine());
-    std::cerr << *sourceline << std::endl;
+    std::cerr << utf8_to_string(*sourceline) << std::endl;
     int start = message->GetStartColumn();
     for (int n = 0; n < start; n++) {
       std::cerr << " ";
@@ -115,7 +277,7 @@ report_exception(v8::TryCatch& try_catch) {
     v8::String::Utf8Value stack_trace(try_catch.StackTrace());
     if (stack_trace.length() > 0) {
       const char* stack_trace_string = *stack_trace;
-      std::cerr << stack_trace_string << std::endl;
+      std::cerr << utf8_to_string(stack_trace_string) << std::endl;
     }
   }
 }
@@ -132,6 +294,7 @@ main(int argc, char* argv[]) {
   bool opt_interactive = false;
   std::string opt_output;
   std::vector<std::string> args;
+
   for (int n = 1; n < argc; n++) {
     std::string arg = argv[n];
     if (arg == "-c" || arg == "--compile") opt_compile = true;
@@ -244,7 +407,7 @@ main(int argc, char* argv[]) {
       coffee_script << line;
 
       std::string code = "_=(";
-      code += coffee_script.str() + "\n)";
+      code += string_to_utf8(coffee_script.str()) + "\n)";
       call_args[0] = v8::String::New(code.c_str());
       call_args[1] = compileOptions;
       coffee_script.str("");
@@ -264,7 +427,7 @@ main(int argc, char* argv[]) {
         call_args[0] = result;
         result = stringify->Call(context->Global(), 1, call_args);
         v8::String::Utf8Value result_string(result);
-        std::cout << *result_string << std::endl;
+        std::cout << utf8_to_string(*result_string) << std::endl;
       }
 
       // GC
@@ -300,7 +463,8 @@ main(int argc, char* argv[]) {
           coffee_object->GetRealNamedProperty(v8::String::New("compile")));
     
         v8::Handle<v8::Value> call_args[2];
-        call_args[0] = v8::String::New(coffee_script.str().c_str());
+        std::string code = string_to_utf8(coffee_script.str());
+        call_args[0] = v8::String::New(code.c_str());
         call_args[1] = compileOptions;
     
         result = func->Call(context->Global(), 2, call_args);
@@ -311,7 +475,7 @@ main(int argc, char* argv[]) {
     
         v8::String::Utf8Value js_code(result->ToString());
         if (opt_print) {
-          std::cout << *js_code;
+          std::cout << utf8_to_string(*js_code);
         } else {
           std::string filename = arg;
           size_t pos;
@@ -333,7 +497,7 @@ main(int argc, char* argv[]) {
             std::ofstream ofs(filename.c_str());
             if (!ofs.is_open()) throw std::ofstream::failure(
               std::string("can't open file: ") + filename);
-            ofs << *js_code;
+            ofs << utf8_to_string(*js_code);
             ofs.close();
           } catch (std::ofstream::failure e) {
             std::cerr << "Exception occured: " << e.what() << std::endl;
