@@ -6,8 +6,10 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
+#include <cstring>
 #include <v8.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <io.h>
 #else
 #include <sys/io.h>
@@ -116,6 +118,22 @@ utf_char2bytes(int c, unsigned char* buf) {
 }
 
 std::string string_to_utf8(std::string str) {
+#ifdef _WIN32
+  char* ptr = (char*)str.c_str();
+  size_t wcssize = MultiByteToWideChar(CP_ACP, 0, ptr, -1, NULL, 0);
+  wchar_t* wcstr = new wchar_t[wcssize + 1];
+  wcssize = MultiByteToWideChar(CP_ACP, 0, ptr, -1, wcstr, wcssize);
+  wcstr[wcssize] = 0;
+  printf("%d\n", wcssize);
+  size_t mbssize = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, NULL, 0, NULL, NULL);
+  char* mbstr = new char[mbssize + 1];
+  mbssize = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, mbstr, mbssize, NULL, NULL);
+  mbstr[mbssize] = 0;
+  delete[] wcstr;
+  std::string ret = mbstr;
+  delete[] mbstr;
+  return ret;
+#else
   char* ptr = (char*)str.c_str();
   size_t mbssize = strlen(ptr);
   size_t wcssize = mbssize;
@@ -147,9 +165,25 @@ std::string string_to_utf8(std::string str) {
   }
   delete[] wcstr;
   return ret;
+#endif
 }
 
 std::string utf8_to_string(std::string str) {
+#ifdef _WIN32
+  char* ptr = (char*)str.c_str();
+  size_t wcssize = MultiByteToWideChar(CP_UTF8, 0, ptr, -1, NULL, 0);
+  wchar_t* wcstr = new wchar_t[wcssize + 1];
+  wcssize = MultiByteToWideChar(CP_UTF8, 0, ptr, -1, wcstr, wcssize);
+  wcstr[wcssize] = 0;
+  size_t mbssize = WideCharToMultiByte(CP_ACP, 0, wcstr, -1, NULL, 0, NULL, NULL);
+  char* mbstr = new char[mbssize + 1];
+  mbssize = WideCharToMultiByte(CP_ACP, 0, wcstr, -1, mbstr, mbssize, NULL, NULL);
+  mbstr[mbssize] = 0;
+  delete[] wcstr;
+  std::string ret = mbstr;
+  delete[] mbstr;
+  return ret;
+#else
   char* ptr = (char*)str.c_str();
   if (ptr[0] == (char)0xef && ptr[1] == (char)0xbb && ptr[2] == (char)0xbf)
     ptr += 3;
@@ -185,6 +219,7 @@ std::string utf8_to_string(std::string str) {
   std::string ret = mbstr;
   delete[] mbstr;
   return ret;
+#endif
 }
 
 extern const char* coffee_script_js;
@@ -463,7 +498,7 @@ main(int argc, char* argv[]) {
           coffee_object->GetRealNamedProperty(v8::String::New("compile")));
     
         v8::Handle<v8::Value> call_args[2];
-        std::string code = string_to_utf8(coffee_script.str());
+        std::string code = coffee_script.str();
         call_args[0] = v8::String::New(code.c_str());
         call_args[1] = compileOptions;
     
