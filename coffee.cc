@@ -124,7 +124,6 @@ std::string string_to_utf8(std::string str) {
   wchar_t* wcstr = new wchar_t[wcssize + 1];
   wcssize = MultiByteToWideChar(CP_ACP, 0, ptr, -1, wcstr, wcssize);
   wcstr[wcssize] = 0;
-  printf("%d\n", wcssize);
   size_t mbssize = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, NULL, 0, NULL, NULL);
   char* mbstr = new char[mbssize + 1];
   mbssize = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, mbstr, mbssize, NULL, NULL);
