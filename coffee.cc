@@ -349,6 +349,7 @@ main(int argc, char* argv[]) {
   }
   if (!isatty(fileno(stdin))) {
     opt_stdio = true;
+    opt_print = true;
   }
   if (opt_print) {
     opt_compile = true;
