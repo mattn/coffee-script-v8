@@ -510,7 +510,10 @@ main(int argc, char* argv[]) {
     
         v8::String::Utf8Value js_code(result->ToString());
         if (opt_print) {
-          std::cout << utf8_to_string(*js_code);
+          if (!isatty(fileno(stdout)))
+            std::cout << *js_code;
+          else
+            std::cout << utf8_to_string(*js_code);
         } else {
           std::string filename = arg;
           size_t pos;
