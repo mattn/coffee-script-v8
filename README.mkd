@@ -1,10 +1,18 @@
-coffee-script-v8
-================
+# coffee-script-v8
 
 CoffeeScript compiler/runner.
 
-Compile:
---------
+## Requirements
+
+* libv8-dev
+
+if you are on ubuntu:
+
+```
+$ sudo apt-get install libv8-dev
+```
+
+## Build
 
 * For Windows
 
@@ -18,15 +26,13 @@ g++ -o coffee coffee.cc -lv8 -lwinmm -lws2_32
 g++ -o coffee coffee.cc -lv8 -lpthread
 ```
 
-Run:
-----
+## Usage
 
 ```
 coffee -h
 ```
 
-Author:
--------
+## Author
 
 > Yasuhiro Matsumoto `<mattn.jp@gmail.com>`
 
