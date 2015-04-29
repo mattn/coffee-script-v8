@@ -34,5 +34,5 @@ coffee -h
 
 ## Author
 
-> Yasuhiro Matsumoto `<mattn.jp@gmail.com>`
+Yasuhiro Matsumoto `<mattn.jp@gmail.com>`
 
